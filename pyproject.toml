@@ -1,0 +1,22 @@
+[project]
+name = "cineverse"
+version = "0.1.0"
+description = "backserver-app env"
+requires-python = ">=3.14"
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic-settings>=2.6.0",
+    "email-validator>=2.2.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+# 가상환경 상태에서 실행 할 것
+# 실행 코드 :
+# python -m pip install -e .
