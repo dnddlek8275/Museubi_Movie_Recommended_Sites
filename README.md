@@ -1,4 +1,4 @@
-# CineVerse DB/Service Module
+# CineVerse B2 - DB/Service Module
 
 이 폴더는 B1 FastAPI 서버에 붙여 사용할 DB 모델, Alembic 마이그레이션, Pydantic 스키마, service 함수를 담당한다.
 
@@ -116,14 +116,14 @@ python3 -m alembic upgrade head
 
 | 테이블 | 목적 |
 | --- | --- |
-| `users` | 사용자 기본 정보 |
+| `users` | 사용자 기본 정보, 화면 표시용 초기 선호 목록 |
 | `refresh_tokens` | Refresh Token hash 저장/검증/폐기 |
 | `movies` | 영화 정보 |
 | `movie_genres` | 영화 장르 정규화 테이블 |
 | `characters` | 캐릭터 정보/프롬프트 |
 | `character_aliases` | `/chat/auto` 캐릭터 자동 매핑용 별칭 |
 | `user_movie_interactions` | 사용자 영화 행동 로그 |
-| `user_preference_scores` | 사용자 영화/캐릭터 취향 점수 |
+| `user_preference_scores` | 추천 계산용 사용자 영화/캐릭터 취향 점수 |
 | `movie_stats` | 영화 랭킹 누적 통계 |
 | `chat_rooms` | 채팅방 정보 |
 | `chat_messages` | 채팅 메시지, 추천 영화 snapshot |
@@ -178,10 +178,24 @@ python3 -m alembic upgrade head
 
 별칭은 한 캐릭터에 여러 개 등록할 수 있다. 같은 별칭이 서로 다른 캐릭터에 연결되면 자동 매핑이 모호해지므로 DB에서 중복을 허용하지 않는다.
 
+## 사용자 선호 데이터 기준
+
+사용자 선호 데이터는 표시용 데이터와 추천 계산용 데이터를 구분해서 사용한다.
+
+| 위치 | 용도 | 예시 |
+| --- | --- | --- |
+| `users.preferred_genres` | 메인페이지/마이페이지에 보여줄 사용자가 직접 선택한 선호 장르 목록 | `["액션", "스릴러"]` |
+| `users.preferred_actors` | 메인페이지/마이페이지에 보여줄 사용자가 직접 선택한 선호 배우 목록 | `["마동석", "이병헌"]` |
+| `users.preferred_keywords` | 메인페이지/마이페이지에 보여줄 사용자가 직접 선택한 선호 키워드 목록 | `["복수", "성장"]` |
+| `user_preference_scores` | 추천 계산에 사용하는 행동 기반 학습 점수 | `genre / 액션 / 5.5` |
+
+`users.preferred_*`는 사용자가 직접 선택한 값을 보여주기 위한 프로필성 데이터다. `user_preference_scores`는 조회, 검색 후 조회, 좋아요, 캐릭터 선택/대화 같은 행동을 기반으로 누적되는 추천용 데이터다.
+
+두 데이터는 일부 값이 겹칠 수 있지만 목적이 다르므로 유지한다. 회원가입이나 취향 수정에서 `users.preferred_*`를 받는 경우, 추천에 즉시 반영하려면 같은 값을 `user_preference_scores`의 초기 점수로도 저장하는 방식을 사용할 수 있다.
+
 ## 남은 범위
 
-- B1 라우터에서 service 직접 호출로 연결
-- 영화 CSV import 스크립트 작성
+- 영화 CSV import 스크립트 작성 (서버 올린 후 진행)
 - 비로그인 사용자 식별/JWT 정책 확정 후 guest 추천 로직 구현
 - 관리자 작업 이력 저장 로직
 - 배포/CI/CD
