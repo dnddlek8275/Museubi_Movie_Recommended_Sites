@@ -6,7 +6,7 @@ from app.models.chat import ChatMessage, ChatRoom
 from app.models.daily_recommendation import DailyAiRecommendation, DailyAiRecommendationMovie
 from app.models.interaction import MovieStats, UserMovieInteraction, UserPreferenceScore
 from app.models.movie import Movie, MovieGenre
-from app.models.user import User, RefreshToken
+from app.models.user import EmailVerificationCode, PasswordResetToken, RefreshToken, User
 
 
 # Alembic autogenerate가 전체 모델 메타데이터를 볼 수 있도록 모델 import를 한곳에 모은다.
@@ -20,10 +20,12 @@ __all__ = [
     "ChatRoom",
     "DailyAiRecommendation",
     "DailyAiRecommendationMovie",
+    "EmailVerificationCode",
     "Movie",
     "MovieActor",
     "MovieGenre",
     "MovieStats",
+    "PasswordResetToken",
     "User",
     "RefreshToken",
     "UserMovieInteraction",

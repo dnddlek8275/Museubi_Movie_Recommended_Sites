@@ -9,7 +9,7 @@ from app.models.character import Character
 from app.models.chat import ChatMessage
 from app.models.movie import Movie
 from app.schemas.actor import CreateActor, CreateMovieActor
-from app.schemas.auth import CreateRefreshToken
+from app.schemas.auth import CreateEmailVerificationCode, CreatePasswordResetToken, CreateRefreshToken
 from app.schemas.chat import CreateChatMessage, CreateChatRoom
 from app.schemas.character import CreateCharacter, UpdateCharacter
 from app.schemas.daily_recommendation import CreateDailyAiRecommendation
@@ -17,7 +17,16 @@ from app.schemas.movie import CreateMovie
 from app.schemas.user import CreateUser
 from app.services.actor_service import link_movie_actor, list_movies_by_actor, upsert_actor_from_tmdb
 from app.services.admin_service import create_character, create_movie, get_admin_stats, update_character
-from app.services.auth_service import create_refresh_token, revoke_refresh_token, verify_refresh_token
+from app.services.auth_service import (
+    create_email_verification_code,
+    create_password_reset_token,
+    create_refresh_token,
+    reset_password_with_token,
+    revoke_refresh_token,
+    verify_email_verification_code,
+    verify_password_reset_token,
+    verify_refresh_token,
+)
 from app.services.chat_service import create_chat_message, create_chat_room, get_character_by_name_or_alias
 from app.services.daily_recommendation_service import replace_daily_ai_recommendation
 from app.services.interaction_service import record_movie_interaction, resolve_action_type
@@ -31,6 +40,8 @@ from app.services.user_service import create_user, get_user_by_email
 DEMO_EMAIL = "demo-user@cineverse.testmail.com"
 DEMO_TMDB_ID = 990001
 DEMO_TOKEN_PREFIX = "demo-refresh-token-hash"
+DEMO_PASSWORD_RESET_TOKEN_PREFIX = "demo-password-reset-token-hash"
+DEMO_EMAIL_CODE_PREFIX = "demo-email-code-hash"
 
 
 def main() -> None:
@@ -45,6 +56,8 @@ def main() -> None:
         record_demo_character_preferences(db, user_id=user.id, character_id=character.id)
         verify_demo_character_alias(db, character_name=character.name)
         verify_demo_refresh_token(db, user_id=user.id)
+        verify_demo_email_verification_code(db)
+        verify_demo_password_reset_token(db, email=user.email)
         recommendations = recommend_movies_for_user(
             db,
             user.id,
@@ -259,6 +272,70 @@ def verify_demo_refresh_token(db, *, user_id: int) -> None:
     revoked_token = revoke_refresh_token(db, token_hash)
 
     print(f"refresh token verified: token_id={token.id}, revoked_at={revoked_token.revoked_at}")
+
+
+def verify_demo_email_verification_code(db) -> None:
+    # 회원가입 전 이메일 인증 코드 저장/검증/사용 완료 흐름을 확인한다.
+    email = f"verify-{datetime.now(timezone.utc).timestamp()}@cineverse.testmail.com"
+    code_hash = f"{DEMO_EMAIL_CODE_PREFIX}-{datetime.now(timezone.utc).timestamp()}"
+    create_email_verification_code(
+        db,
+        CreateEmailVerificationCode(
+            email=email,
+            code_hash=code_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        ),
+    )
+
+    verified_code = verify_email_verification_code(
+        db,
+        email=email,
+        code_hash=code_hash,
+    )
+
+    try:
+        verify_email_verification_code(
+            db,
+            email=email,
+            code_hash=code_hash,
+        )
+    except ServiceError as exc:
+        if exc.status_code != 404:
+            raise
+    else:
+        raise ServiceError("인증 완료된 이메일 코드가 다시 검증되었습니다.", status_code=500)
+
+    print(f"email verification code verified: code_id={verified_code.id}, email={email}")
+
+
+def verify_demo_password_reset_token(db, *, email: str) -> None:
+    # 비밀번호 재설정 토큰 생성/검증/사용 완료 흐름을 service 함수만으로 확인한다.
+    token_hash = f"{DEMO_PASSWORD_RESET_TOKEN_PREFIX}-{datetime.now(timezone.utc).timestamp()}"
+    create_password_reset_token(
+        db,
+        CreatePasswordResetToken(
+            email=email,
+            token_hash=token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ),
+    )
+
+    token = verify_password_reset_token(db, token_hash)
+    user = reset_password_with_token(
+        db,
+        token_hash,
+        new_password_hash=f"demo-password-hash-reset-{datetime.now(timezone.utc).timestamp()}",
+    )
+
+    try:
+        verify_password_reset_token(db, token_hash)
+    except ServiceError as exc:
+        if exc.status_code != 401:
+            raise
+    else:
+        raise ServiceError("사용 완료된 비밀번호 재설정 토큰이 다시 검증되었습니다.", status_code=500)
+
+    print(f"password reset token verified: token_id={token.id}, user_id={user.id}")
 
 
 def save_demo_daily_ai_recommendation(db, *, movie_id: int) -> dict:

@@ -75,7 +75,7 @@ B1은 이 예외를 잡아서 팀 응답 규칙에 맞게 `failure` 응답으로
 | service | 주요 함수 |
 | --- | --- |
 | `user_service.py` | `create_user`, `update_user`, `get_user_by_email`, `get_password_hash_by_email`, `get_user_id_by_email`, `get_nickname_by_email` |
-| `auth_service.py` | `create_refresh_token`, `verify_refresh_token`, `revoke_refresh_token` |
+| `auth_service.py` | `create_refresh_token`, `verify_refresh_token`, `revoke_refresh_token`, `create_email_verification_code`, `verify_email_verification_code`, `create_password_reset_token`, `verify_password_reset_token`, `reset_password_with_token` |
 | `chat_service.py` | 채팅방/채팅 메시지 저장, LLM 추천 영화 JSON에 `movie_id` 매칭 후 snapshot 저장 |
 | `admin_service.py` | 영화/캐릭터 CRUD, 관리자 통계 |
 | `actor_service.py` | 배우 저장/갱신, 영화-배우 연결, 배우별 영화 조회 |
@@ -107,6 +107,8 @@ python scripts/verify_services.py
 - 사용자 취향 기반 영화 추천 확인
 - 인기 랭킹 집계 확인
 - Refresh Token 저장/검증/폐기 확인
+- 회원가입 이메일 인증 코드 생성/검증/재사용 차단 확인
+- 비밀번호 재설정 토큰 생성/검증/비밀번호 변경/재사용 차단 확인
 
 실행 전에 마이그레이션이 적용되어 있어야 한다.
 
@@ -120,6 +122,8 @@ python3 -m alembic upgrade head
 | --- | --- |
 | `users` | 사용자 기본 정보, 프로필 이미지 경로, 화면 표시용 초기 선호 목록 |
 | `refresh_tokens` | Refresh Token hash 저장/검증/폐기 |
+| `password_reset_tokens` | 비밀번호 재설정용 1회용 token hash 저장/검증/사용 완료 처리 |
+| `email_verification_codes` | 회원가입 이메일 인증 코드 hash 저장/검증/인증 완료 처리 |
 | `movies` | 영화 정보 |
 | `movie_genres` | 영화 장르 정규화 테이블 |
 | `actors` | 배우 정보, TMDB 배우 ID, 프로필 이미지 경로 |
@@ -144,6 +148,8 @@ python3 -m alembic upgrade head
 - 캐릭터 별칭 정규화 테이블 `character_aliases`
 - 사용자 생성/조회 service
 - Refresh Token 저장/검증/폐기 service
+- 회원가입 이메일 인증 코드 저장/검증 service
+- 비밀번호 재설정 토큰 저장/검증/비밀번호 변경 service
 - 영화/캐릭터 CRUD service
 - `/chat/auto`용 캐릭터 정식 이름/별칭 매핑 service
 - 영화 조회/검색 후 조회/좋아요 기록 service
@@ -152,6 +158,46 @@ python3 -m alembic upgrade head
 - 영화/캐릭터 기반 취향 점수 누적 service
 - 사용자 취향 기반 영화 추천 service
 - 마이페이지용 취향/좋아요/조회 기록 조회 service
+
+
+
+## 회원가입 이메일 인증 기준
+
+회원가입 이메일 인증은 아직 `users` row가 만들어지기 전 단계이므로 `user_id`가 아니라 `email` 기준으로 관리한다. B1은 6자리 코드 원문 생성, 코드 hash 생성, 이메일 발송을 담당하고, B2는 `code_hash` 저장/검증/인증 완료 처리를 담당한다.
+
+기본 흐름:
+
+```text
+이메일 입력 -> B1 인증 코드 생성/해시 -> B2 email_verification_codes 저장 -> B1 이메일 발송
+사용자 코드 입력 -> B1 입력 코드 해시 -> B2 최신 미인증 코드 검증 -> verified_at 기록 -> B1 회원가입 진행
+```
+
+| 컬럼 | 의미 |
+| --- | --- |
+| `email` | 인증 대상 이메일 |
+| `purpose` | 인증 목적, 기본값은 `signup` |
+| `code_hash` | 인증 코드 원문을 해시한 값, DB에는 원문 저장 안 함 |
+| `expires_at` | 인증 코드 만료 시간 |
+| `verified_at` | 인증 완료 시간, 값이 있으면 재사용 불가 |
+| `attempt_count` | 코드 불일치 횟수, 기본 최대 5회 |
+
+## 비밀번호 재설정 기준
+
+비밀번호 찾기 흐름에서 B1은 사용자 입력, 일회용 토큰 원문 생성, 이메일 발송, 재설정 화면을 담당한다. B2는 토큰 원문을 받지 않고 `token_hash`만 저장/검증하며, 최종 단계에서 `users.password_hash`를 변경하고 토큰을 사용 완료 처리한다.
+
+기본 흐름:
+
+```text
+이메일 입력 -> B1 토큰 생성/해시 -> B2 password_reset_tokens 저장 -> B1 이메일 발송
+재설정 링크 접속 -> 새 비밀번호 입력 -> B1 새 비밀번호 해시 -> B2 토큰 검증 + users.password_hash 변경 + used_at 기록
+```
+
+| 컬럼 | 의미 |
+| --- | --- |
+| `user_id` | 재설정 대상 사용자 |
+| `token_hash` | 이메일 링크 토큰 원문을 해시한 값, DB에는 원문 저장 안 함 |
+| `expires_at` | 토큰 만료 시간 |
+| `used_at` | 비밀번호 변경 완료 시간, 값이 있으면 재사용 불가 |
 
 ## 영화 CSV 적재 기준
 
