@@ -55,6 +55,10 @@ class VerifyPasswordResetToken(BaseModel):
     token_hash: str
 
 
+class RevokePasswordResetToken(BaseModel):
+    token_hash: str
+
+
 class ResetPasswordWithToken(BaseModel):
     token_hash: str
     new_password_hash: str
@@ -69,6 +73,7 @@ class ReadPasswordResetToken(BaseModel):
     created_at: datetime
     expires_at: datetime
     used_at: datetime | None
+    revoked_at: datetime | None
 
 
 class PasswordResetVerifyResult(BaseModel):

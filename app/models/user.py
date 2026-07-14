@@ -80,8 +80,9 @@ class PasswordResetToken(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # 비밀번호 재설정 토큰은 1회용이므로 사용 후 used_at으로 재사용을 막는다.
+    # used_at은 정상 사용 완료, revoked_at은 사용 전 강제 폐기를 구분하기 위해 둔다.
     user = relationship("User", back_populates="password_reset_tokens")
 
 

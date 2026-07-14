@@ -198,6 +198,7 @@ python3 -m alembic upgrade head
 | `token_hash` | 이메일 링크 토큰 원문을 해시한 값, DB에는 원문 저장 안 함 |
 | `expires_at` | 토큰 만료 시간 |
 | `used_at` | 비밀번호 변경 완료 시간, 값이 있으면 재사용 불가 |
+| `revoked_at` | 사용 전 강제 폐기 시간, 값이 있으면 사용 불가 |
 
 ## 영화 CSV 적재 기준
 

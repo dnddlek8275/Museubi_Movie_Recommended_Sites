@@ -22,6 +22,7 @@ from app.services.auth_service import (
     create_password_reset_token,
     create_refresh_token,
     reset_password_with_token,
+    revoke_password_reset_token,
     revoke_refresh_token,
     verify_email_verification_code,
     verify_password_reset_token,
@@ -335,7 +336,28 @@ def verify_demo_password_reset_token(db, *, email: str) -> None:
     else:
         raise ServiceError("사용 완료된 비밀번호 재설정 토큰이 다시 검증되었습니다.", status_code=500)
 
-    print(f"password reset token verified: token_id={token.id}, user_id={user.id}")
+    revoked_token_hash = f"{DEMO_PASSWORD_RESET_TOKEN_PREFIX}-revoked-{datetime.now(timezone.utc).timestamp()}"
+    create_password_reset_token(
+        db,
+        CreatePasswordResetToken(
+            email=email,
+            token_hash=revoked_token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ),
+    )
+    revoked_token = revoke_password_reset_token(db, revoked_token_hash)
+    try:
+        verify_password_reset_token(db, revoked_token_hash)
+    except ServiceError as exc:
+        if exc.status_code != 401:
+            raise
+    else:
+        raise ServiceError("폐기된 비밀번호 재설정 토큰이 다시 검증되었습니다.", status_code=500)
+
+    print(
+        f"password reset token verified: token_id={token.id}, "
+        f"revoked_token_id={revoked_token.id}, user_id={user.id}"
+    )
 
 
 def save_demo_daily_ai_recommendation(db, *, movie_id: int) -> dict:

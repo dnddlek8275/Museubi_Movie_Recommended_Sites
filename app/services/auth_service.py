@@ -167,6 +167,8 @@ def verify_password_reset_token(db: Session, token_hash: str) -> PasswordResetTo
 
     if password_reset_token.used_at is not None:
         raise ServiceError("이미 사용된 비밀번호 재설정 토큰입니다.", status_code=401)
+    if password_reset_token.revoked_at is not None:
+        raise ServiceError("폐기된 비밀번호 재설정 토큰입니다.", status_code=401)
     if password_reset_token.expires_at <= now:
         raise ServiceError("만료된 비밀번호 재설정 토큰입니다.", status_code=401)
 
@@ -185,6 +187,16 @@ def reset_password_with_token(db: Session, token_hash: str, new_password_hash: s
     db.commit()
     db.refresh(user)
     return user
+
+
+def revoke_password_reset_token(db: Session, token_hash: str) -> PasswordResetToken:
+    # 비밀번호 변경에 쓰지 않은 재설정 토큰을 강제로 폐기 처리한다.
+    password_reset_token = get_password_reset_token_or_404(db, token_hash)
+    if password_reset_token.revoked_at is None:
+        password_reset_token.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(password_reset_token)
+    return password_reset_token
 
 
 def get_password_reset_token_or_404(db: Session, token_hash: str) -> PasswordResetToken:
